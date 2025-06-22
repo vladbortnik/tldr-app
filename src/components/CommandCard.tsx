@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useState } from "react";
-import { Command } from "../commandData";
+import { Command } from "../services";
 
 /**
  * Props for the CommandCard component

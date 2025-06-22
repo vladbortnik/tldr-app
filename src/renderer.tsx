@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { searchCommands, Command } from "./commandData";
+import { Command, commandService } from "./services";
 import AppContainer from "./components/AppContainer";
 import "./index.css";
 
@@ -39,7 +39,7 @@ const App = (): React.ReactElement => {
     setIsSearchActive(query.length > 0);
 
     if (query.trim()) {
-      const results = searchCommands(query);
+      const results = commandService.searchCommands(query);
       setSearchResults(results);
     } else {
       setSearchResults([]);

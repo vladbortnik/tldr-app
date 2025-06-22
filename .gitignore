@@ -90,3 +90,16 @@ typings/
 
 # Electron-Forge
 out/
+
+# TLDR App specific
+# SQLite database files
+src/assets/commands.db
+src/assets/commands.db-*
+
+# Temporary directories
+temp-tldr/
+temp/
+
+# Build artifacts
+dist/
+build/

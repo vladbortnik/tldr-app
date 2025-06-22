@@ -1,7 +1,7 @@
 import * as React from "react";
 import SearchInput from "./SearchInput";
 import SearchResults from "./SearchResults";
-import { Command } from "../commandData";
+import { Command } from "../services";
 
 /**
  * Props for the AppContainer component

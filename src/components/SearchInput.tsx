@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useEffect, useRef } from "react";
+import { commandService } from "../services";
 
 /**
  * Props for the SearchInput component

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useEffect } from "react";
-import { Command } from "../commandData";
+import { Command } from "../services";
 import CommandCard from "./CommandCard";
 
 /**
