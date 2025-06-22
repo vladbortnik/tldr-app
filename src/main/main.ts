@@ -1,17 +1,29 @@
-import { app, BrowserWindow, globalShortcut, screen, ipcMain } from "electron";
-import path from "path";
+import { app, BrowserWindow, globalShortcut, ipcMain, screen } from "electron";
+import * as path from "path";
 
 /**
  * TL;DR App - Main Process
  * Entry point for the Electron main process that handles window creation and IPC communication
  */
 
+// Import storage service
+import { StorageService } from '../services/storageService';
+
+/**
+ * Storage service instance for database operations
+ * Use getInstance() to access the singleton
+ */
+const storageService = StorageService.getInstance();
+
 if (require("electron-squirrel-startup")) {
   app.quit();
 }
 
-/** Reference to the main application window */
-let mainWindow: BrowserWindow;
+/**
+ * Main application window reference
+ * This must be maintained to prevent garbage collection
+ */
+let mainWindow: BrowserWindow | null = null;
 
 /**
  * Creates the main application window with appropriate settings
@@ -51,11 +63,10 @@ const createWindow = (): void => {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
 
-  // Auto-hide on blur temporarily disabled for development
-  // To re-enable, uncomment these lines
-  // mainWindow.on("blur", () => {
-  //   mainWindow.hide();
-  // });
+  // Auto-hide window when it loses focus
+  mainWindow.on("blur", () => {
+    mainWindow.hide();
+  });
 };
 
 // ===============================
@@ -93,6 +104,42 @@ ipcMain.handle("resize-window", (event: Electron.IpcMainInvokeEvent, { width, he
 });
 
 /**
+ * IPC handler for initialize database
+ * Initializes the database when triggered from renderer process
+ */
+ipcMain.handle("db:initialize", async (): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await storageService?.initialize();
+    return { success: true };
+  } catch (error) {
+    console.error("Error initializing database:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+// Get command by name handler moved to the bottom of file to avoid duplicate registration
+
+/**
+ * IPC handler for save command
+ * Saves a command to the database when triggered from renderer process
+ * 
+ * @param {Electron.IpcMainInvokeEvent} event - The IPC event
+ * @param {any} command - The command to save
+ */
+ipcMain.handle("db:save-command", async (_event, command: any): Promise<any | null> => {
+  try {
+    const savedCommand = await storageService?.saveCommand(command);
+    return savedCommand || null;
+  } catch (error) {
+    console.error("Error saving command:", error);
+    return null;
+  }
+});
+
+// Get recent commands handler moved to the bottom of file to avoid duplicate registration
+
+/**
  * App ready event handler
  * Creates the main window and registers global keyboard shortcuts
  */
@@ -108,6 +155,13 @@ app.on("ready", (): void => {
         mainWindow.show();
         mainWindow.focus();
       }
+    }
+  });
+  
+  // Register ESC key to hide window
+  globalShortcut.register("Escape", (): void => {
+    if (mainWindow && mainWindow.isVisible()) {
+      mainWindow.hide();
     }
   });
 });
@@ -138,4 +192,59 @@ app.on("activate", (): void => {
  */
 app.on("will-quit", (): void => {
   globalShortcut.unregisterAll();
+});
+
+/**
+ * IPC Handlers for Database Operations
+ * These handlers run in the main process and access the SQLite database
+ */
+
+// Search commands in database
+ipcMain.handle("db:search-commands", async (_event, query: string, limit: number = 10) => {
+  try {
+    return await storageService.searchCommands(query, limit);
+  } catch (error) {
+    console.error("Error in db:search-commands:", error);
+    return [];
+  }
+});
+
+// Get a command by name
+ipcMain.handle("db:get-command-by-name", async (_event, name: string) => {
+  try {
+    return await storageService.getCommandByName(name);
+  } catch (error) {
+    console.error("Error in db:get-command-by-name:", error);
+    return null;
+  }
+});
+
+// Get recent commands
+ipcMain.handle("db:get-recent-commands", async (_event, limit: number = 10) => {
+  try {
+    return await storageService.getRecentCommands(limit);
+  } catch (error) {
+    console.error("Error in db:get-recent-commands:", error);
+    return [];
+  }
+});
+
+// Get command count
+ipcMain.handle("db:get-command-count", async () => {
+  try {
+    return await storageService.getCommandCount();
+  } catch (error) {
+    console.error("Error in db:get-command-count:", error);
+    return 0;
+  }
+});
+
+// Log command usage
+ipcMain.handle("db:log-command-usage", async (_event, commandId: number, rawInput: string) => {
+  try {
+    return await storageService.logCommandUsage(commandId, rawInput);
+  } catch (error) {
+    console.error("Error in db:log-command-usage:", error);
+    return false;
+  }
 });

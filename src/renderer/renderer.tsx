@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Command, commandService } from "./services";
+import { Command, commandService } from "@services/index";
 import AppContainer from "./components/AppContainer";
 import "./index.css";
 
@@ -33,14 +33,26 @@ const App = (): React.ReactElement => {
    * 
    * @param {React.ChangeEvent<HTMLInputElement>} e - Change event from search input
    */
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+  /**
+   * Handles changes to the search input
+   * Updates search query state and performs search
+   * 
+   * @param {React.ChangeEvent<HTMLInputElement>} e - Change event from search input
+   */
+  const handleSearchChange = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
     const query = e.target.value;
     setSearchQuery(query);
     setIsSearchActive(query.length > 0);
 
     if (query.trim()) {
-      const results = commandService.searchCommands(query);
-      setSearchResults(results);
+      // Using async/await with try/catch for better error handling
+      try {
+        const results = await commandService.searchCommands(query);
+        setSearchResults(results);
+      } catch (error) {
+        console.error('Error searching commands:', error);
+        setSearchResults([]);
+      }
     } else {
       setSearchResults([]);
     }

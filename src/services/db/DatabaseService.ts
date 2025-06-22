@@ -2,12 +2,32 @@
  * DatabaseService - Core SQLite database operations
  * Manages database connection, schema initialization, and base operations
  */
-
-import * as sqlite3 from 'sqlite3';
 import * as path from 'path';
 import * as fs from 'fs';
 import { app } from 'electron';
 import { Command, CommandSource } from '../types';
+import { loadSQLite, createMockSQLite, SQLite3, SQLite3Database } from './sqlite-loader';
+
+// Load SQLite with improved error handling
+let sqlite3: SQLite3;
+let useMockDatabase = false;
+
+try {
+  const loadedSQLite = loadSQLite();
+  if (loadedSQLite) {
+    sqlite3 = loadedSQLite;
+    console.log('SQLite3 module loaded successfully via sqlite-loader');
+  } else {
+    console.warn('SQLite3 module failed to load, using mock implementation');
+    sqlite3 = createMockSQLite();
+    useMockDatabase = true;
+  }
+} catch (err: any) {
+  console.error('Error during SQLite3 initialization:', err);
+  console.error('Falling back to mock database implementation');
+  sqlite3 = createMockSQLite();
+  useMockDatabase = true;
+}
 
 /**
  * Result interface for database operations
@@ -33,9 +53,10 @@ export interface CacheItem {
  */
 export class DatabaseService {
   private static instance: DatabaseService;
-  private db: sqlite3.Database | null = null;
+  private db: SQLite3Database | null = null;
   private dbPath: string;
   private schemaPath: string;
+  private prePopulatedDbPath: string;
   private initialized = false;
   
   /**
@@ -49,6 +70,9 @@ export class DatabaseService {
     
     // Path to schema SQL file
     this.schemaPath = path.join(__dirname, 'schema.sql');
+    
+    // Path to pre-populated database from assets
+    this.prePopulatedDbPath = path.join(__dirname, '../../assets/commands.db');
   }
   
   /**
@@ -78,32 +102,52 @@ export class DatabaseService {
         fs.mkdirSync(dbDir, { recursive: true });
       }
       
+      // Check if we need to copy the pre-populated database
+      if (!fs.existsSync(this.dbPath) && fs.existsSync(this.prePopulatedDbPath)) {
+        console.log('Copying pre-populated database to user data directory...');
+        try {
+          fs.copyFileSync(this.prePopulatedDbPath, this.dbPath);
+          console.log('Pre-populated database copied successfully');
+        } catch (copyErr) {
+          console.error('Failed to copy pre-populated database:', copyErr);
+        }
+      }
+      
       // Create database connection with verbose mode for better logging
       const verbose = sqlite3.verbose();
       
       return new Promise<boolean>((resolve, reject) => {
-        this.db = new verbose.Database(this.dbPath, async (err) => {
+        // Mode parameter (second arg) is expected to be a number
+        // 1 = READONLY, 2 = READWRITE, 6 = READWRITE | CREATE
+        const OPEN_READWRITE_CREATE = 6;
+        
+        this.db = new verbose.Database(this.dbPath, OPEN_READWRITE_CREATE, (err: Error | null) => {
           if (err) {
             console.error('Error opening database:', err.message);
             reject(err);
             return;
           }
           
-          try {
-            // Enable foreign keys and other pragmas
-            await this.run('PRAGMA foreign_keys = ON;');
-            await this.run('PRAGMA journal_mode = WAL;');
-            
-            // Initialize schema
-            await this.initSchema();
-            
-            console.log('Database initialized successfully');
-            this.initialized = true;
-            resolve(true);
-          } catch (error) {
-            console.error('Error initializing database:', error);
-            reject(error);
-          }
+          // Use non-async callbacks to avoid TypeScript errors
+          this.run('PRAGMA foreign_keys = ON;').then(() => {
+            this.run('PRAGMA journal_mode = WAL;').then(() => {
+              // Initialize schema
+              this.initSchema().then(() => {
+                console.log('Database initialized successfully');
+                this.initialized = true;
+                resolve(true);
+              }).catch((schemaError) => {
+                console.error('Error initializing schema:', schemaError);
+                reject(schemaError);
+              });
+            }).catch((pragmaError) => {
+              console.error('Error setting pragma:', pragmaError);
+              reject(pragmaError);
+            });
+          }).catch((pragmaError) => {
+            console.error('Error setting foreign keys:', pragmaError);
+            reject(pragmaError);
+          });
         });
       });
     } catch (error) {
@@ -151,7 +195,7 @@ export class DatabaseService {
     }
     
     return new Promise((resolve) => {
-      this.db!.run(sql, params, function(err) {
+      this.db!.run(sql, params, function(this: {changes: number, lastID: number}, err: Error | null) {
         if (err) {
           resolve({ 
             success: false, 
@@ -183,7 +227,7 @@ export class DatabaseService {
     }
     
     return new Promise((resolve) => {
-      this.db!.get(sql, params, (err, row) => {
+      this.db!.get(sql, params, (err: Error | null, row: any) => {
         if (err) {
           resolve({ success: false, error: err });
           return;
@@ -206,7 +250,7 @@ export class DatabaseService {
     }
     
     return new Promise((resolve) => {
-      this.db!.all(sql, params, (err, rows) => {
+      this.db!.all(sql, params, (err: Error | null, rows: any[]) => {
         if (err) {
           resolve({ success: false, error: err });
           return;
@@ -248,7 +292,7 @@ export class DatabaseService {
     }
     
     return new Promise((resolve) => {
-      this.db!.close((err) => {
+      this.db!.close((err: Error | null) => {
         if (err) {
           console.error('Error closing database:', err.message);
           resolve(false);

@@ -170,7 +170,7 @@ export class SQLiteCommandStorage implements ICommandStorage {
    */
   public async saveCommand(command: Command): Promise<boolean> {
     try {
-      return await databaseService.transaction(async () => {
+      const result = await databaseService.transaction(async () => {
         // Find or create category
         let categoryId: number | null = null;
         if (command.category) {
@@ -292,12 +292,11 @@ export class SQLiteCommandStorage implements ICommandStorage {
           [commandId, command.name]
         );
       });
+      return result.success;
     } catch (error) {
       console.error("Error saving command:", error);
       return false;
     }
-
-    return true;
   }
 
   /**

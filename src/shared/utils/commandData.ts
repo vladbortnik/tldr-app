@@ -25,6 +25,8 @@ export interface Command {
  * For now, it's like having a Python dict with command info
  */
 export const commandsDatabase: Record<string, Command> = {
+
+/* Raw database entries follow */
   // File and Directory Operations
   ls: {
     name: "ls",
@@ -330,3 +332,9 @@ export const getCommandsByCategory = (category: string): Command[] => {
     (command) => command.category === category
   );
 };
+
+/**
+ * Export command database as an array for compatibility with CommandService
+ * @returns {Command[]} Array of all commands
+ */
+export const commandData = Object.values(commandsDatabase);

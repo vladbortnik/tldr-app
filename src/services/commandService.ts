@@ -6,9 +6,39 @@
  * - cht.sh API integration (future implementation)
  */
 
-import { commandsDatabase, Command as LegacyCommand } from "../commandData";
+import { commandData } from "../shared/utils/commandData";
+
+// Electron API for renderer access
+declare global {
+  interface Window {
+    electron: {
+      ping: () => Promise<string>;
+      getUserDataPath: () => Promise<string>;
+      onAppVisibilityChange: (callback: () => void) => void;
+      database: {
+        searchCommands: (query: string, limit?: number) => Promise<Command[]>;
+        getCommandByName: (name: string) => Promise<Command | null>;
+        getRecentCommands: (limit?: number) => Promise<Command[]>;
+        getCommandCount: () => Promise<number>;
+        logCommandUsage: (commandId: number, rawInput: string) => Promise<boolean>;
+      };
+    };
+  }
+}
+
 import { Command, CommandSource } from "./types";
 import { storageService } from "./storageService";
+
+/**
+ * Legacy Command interface for backward compatibility
+ */
+type LegacyCommand = {
+  name: string;
+  standsFor: string;
+  description: string;
+  examples: string[];
+  category: string;
+};
 
 /**
  * Adapter function to convert legacy Command format to new Command interface
@@ -32,133 +62,151 @@ function adaptLegacyCommand(legacyCommand: LegacyCommand): Command {
  */
 export class CommandService {
   /**
+   * Whether the service has been initialized
+   */
+  private initialized = false;
+
+  /**
+   * Whether to use in-memory fallback if SQLite fails
+   */
+  private useMemoryFallback = false;
+  
+  /**
+   * Whether to use SQLite storage as primary data source
+   */
+  private useSqlite = true;
+
+  /**
+   * Reference to the storage service for database operations
+   */
+  private storageService = storageService;
+
+  /**
+   * Check if the service is initialized
+   * @returns True if initialized, false otherwise
+   */
+  private async ensureInitialized(): Promise<void> {
+    if (!this.initialized) {
+      await this.init();
+    }
+  }
+
+  /**
+   * Get recent commands (placeholder implementation)
+   * @param {number} limit - Maximum number of commands to return
+   * @returns {Promise<Command[]>} Recent commands
+   */
+  private async getRecentCommands(limit = 10): Promise<Command[]> {
+    // Implement with real recency data in future
+    return this.memorySearchCommands('', limit);
+  }
+
+  /**
+   * Import legacy command data into SQLite
+   * @returns {Promise<void>}
+   */
+  private async importLegacyCommands(): Promise<void> {
+    // Convert legacy commands to new format and save to SQLite
+    for (const cmd of commandData) {
+      await this.storageService.saveCommand(adaptLegacyCommand(cmd));
+    }
+  }
+  /**
    * Get all available command names for autocomplete
    * 
    * @returns {string[]} Array of all available command names
    */
   public getCommandNames(): string[] {
-    return Object.keys(commandsDatabase);
+    return Object.keys(commandData);
   }
 
   /**
-   * Search commands by name or description
-   * 
-   * @param {string} query - The search query to match against command names and descriptions
-   * @returns {Command[]} Array of commands matching the search query
+   * Search for commands that match a query string
+   * @param {string} query - The search query
+   * @param {number} limit - Maximum results to return
+   * @returns {Promise<Command[]>} - List of matching commands
    */
-  public searchCommands(query: string): Command[] {
-    const normalizedQuery = query.toLowerCase().trim();
+  public async searchCommands(query: string, limit = 10): Promise<Command[]> {
+    await this.ensureInitialized();
     
-    if (!normalizedQuery) {
-      return [];
+    if (!query.trim()) {
+      return this.getRecentCommands(limit);
     }
     
-    return Object.values(commandsDatabase)
-      .filter((command) => {
-        const nameMatch = command.name.toLowerCase().includes(normalizedQuery);
-        const descriptionMatch = command.description.toLowerCase().includes(normalizedQuery);
-        return nameMatch || descriptionMatch;
-      })
+    // Check if we're in the renderer process
+    if (typeof window !== 'undefined' && window.electron) {
+      // Use IPC bridge in renderer
+      try {
+        return await window.electron.database.searchCommands(query, limit);
+      } catch (error) {
+        console.error("Error searching commands via IPC:", error);
+        // Fallback to in-memory search
+        return this.memorySearchCommands(query, limit);
+      }
+    } else if (!this.useMemoryFallback) {
+      // In main process, use storage service directly
+      return this.storageService.searchCommands(query, limit);
+    }
+    
+    // Fallback to in-memory search
+    return this.memorySearchCommands(query, limit);
+  }
+  
+  /**
+   * In-memory search implementation (fallback)
+   * @param {string} query - The search query
+   * @param {number} limit - Maximum results to return
+   * @returns {Promise<Command[]>} - List of matching commands
+   */
+  private memorySearchCommands(query: string, limit = 10): Promise<Command[]> {
+    // Filter commands by name or description match
+    const results = commandData
+      .filter(cmd => 
+        cmd.name.toLowerCase().includes(query.toLowerCase()) || 
+        (cmd.description && cmd.description.toLowerCase().includes(query.toLowerCase()))
+      )
+      .slice(0, limit)
       .map(adaptLegacyCommand);
+    
+    return Promise.resolve(results);
   }
 
   /**
    * Get command by exact name
    * 
    * @param {string} name - The exact name of the command to retrieve
-   * @returns {Command | null} The command object if found, null otherwise
+   * @returns {Promise<Command | null>} The command object if found, null otherwise
    */
-  public getCommandByName(name: string): Command | null {
-    const command = commandsDatabase[name.toLowerCase()];
-    return command ? adaptLegacyCommand(command) : null;
-  }
-
-  /**
-   * Get commands by category
-   * 
-   * @param {string} category - The category to filter commands by
-   * @returns {Command[]} Array of commands belonging to the specified category
-   */
-  public getCommandsByCategory(category: string): Command[] {
-    return Object.values(commandsDatabase)
-      .filter((command) => command.category === category)
-      .map(adaptLegacyCommand);
-  }
-  
-  /**
-   * Get all available command categories
-   * 
-   * @returns {string[]} Array of unique command categories
-   */
-  public getCategories(): string[] {
-    const categories = new Set<string>();
+  public async getCommandByName(name: string): Promise<Command | null> {
+    await this.ensureInitialized();
     
-    Object.values(commandsDatabase).forEach((command) => {
-      categories.add(command.category);
-    });
+    // Check if we're in the renderer process
+    if (typeof window !== 'undefined' && window.electron) {
+      // Use IPC bridge in renderer
+      try {
+        return await window.electron.database.getCommandByName(name);
+      } catch (error) {
+        console.error("Error getting command via IPC:", error);
+        // Fallback to in-memory lookup
+        return this.memoryGetCommandByName(name);
+      }
+    } else if (!this.useMemoryFallback) {
+      // In main process, use storage service directly
+      return this.storageService.getCommandByName(name);
+    }
     
-    return Array.from(categories);
-  }
-  
-  // ===============================
-  // DATABASE AND API IMPLEMENTATIONS
-  // ===============================
-  
-  /** Flag to determine if SQLite is being used */
-  private useSqlite: boolean = false;
-
-  /**
-   * Initialize the database for fast command searching
-   * Prepares the database for use with either in-memory or SQLite storage
-   * 
-   * @param {boolean} useSqlite - Whether to use SQLite or in-memory database
-   * @returns {Promise<void>} Promise that resolves when database is initialized
-   */
-  public async initializeDatabase(useSqlite: boolean = false): Promise<void> {
-    this.useSqlite = useSqlite;
-    
-    if (this.useSqlite) {
-      console.log("Initializing SQLite database");
-      await storageService.initialize();
-      
-      // Populate SQLite with static data if needed
-      // This would be a one-time operation when switching to SQLite
-      const legacyCommands = Object.values(commandsDatabase);
-      const commands = legacyCommands.map(adaptLegacyCommand);
-      console.log(`Would import ${commands.length} commands into SQLite`);
-    } else {
-      console.log("Using in-memory command database");
-    }
+    // Fallback to in-memory lookup
+    return this.memoryGetCommandByName(name);
   }
   
   /**
-   * Search commands using the configured database source
-   * Uses SQLite if enabled, otherwise falls back to in-memory
-   * 
-   * @param {string} query - The search query to match against database
-   * @returns {Promise<Command[]>} Promise that resolves with search results
+   * In-memory command lookup implementation (fallback)
+   * @param {string} name - Command name
+   * @returns {Promise<Command | null>} Command if found, null otherwise
    */
-  public async searchCommandsDb(query: string): Promise<Command[]> {
-    if (this.useSqlite) {
-      return await storageService.searchCommands(query);
-    }
-    // Fall back to in-memory implementation
-    return Promise.resolve(this.searchCommands(query));
-  }
-
-  /**
-   * Get command by name using the configured database source
-   * Uses SQLite if enabled, otherwise falls back to in-memory
-   * 
-   * @param {string} commandName - Name of command to retrieve
-   * @returns {Promise<Command | null>} Promise that resolves with command or null
-   */
-  public async getCommandDbByName(commandName: string): Promise<Command | null> {
-    if (this.useSqlite) {
-      return await storageService.getCommandByName(commandName);
-    }
-    // Fall back to in-memory implementation
-    return Promise.resolve(this.getCommandByName(commandName));
+  private memoryGetCommandByName(name: string): Promise<Command | null> {
+    const cmd = commandData.find(c => c.name === name);
+    return Promise.resolve(cmd ? adaptLegacyCommand(cmd) : null);
   }
   
   /**
@@ -166,14 +214,93 @@ export class CommandService {
    * Uses SQLite if enabled, otherwise logs a message (in-memory is read-only)
    * 
    * @param {Command} command - The command to save
-   * @returns {Promise<void>} Promise that resolves when command is saved
+   * @returns {Promise<boolean>} Promise that resolves with success status
    */
   public async saveCommand(command: Command): Promise<boolean> {
-    if (this.useSqlite) {
-      return await storageService.saveCommand(command);
+    if (this.useMemoryFallback) {
+      console.log(`Would save command ${command.name} if using SQLite`);
+      return Promise.resolve(true);
     }
-    console.log(`Would save command ${command.name} if using SQLite`);
-    return Promise.resolve(true);
+    
+    // Check if we're in the renderer process
+    if (typeof window !== 'undefined' && window.electron) {
+      // Use IPC bridge in renderer
+      try {
+        // Extract command ID and name for logging usage
+        const commandId = typeof command.id === 'number' ? command.id : 0;
+        
+        // In a real implementation, rawInput would come from user interaction context
+        // not from the command object itself. Here we use command name as fallback.
+        const rawInput = command.name;  // Just use command name for now
+        
+        return await window.electron.database.logCommandUsage(commandId, rawInput);
+      } catch (error) {
+        console.error("Error saving command via IPC:", error);
+        return Promise.resolve(false);
+      }
+    } else {
+      // In main process, use storage service directly
+      return this.storageService.saveCommand(command);
+    }
+  }
+  
+  /**
+   * Initialize the database for fast command searching
+   * Prepares the database for use with either in-memory or SQLite storage
+   * 
+   * @param {boolean} useSqlite - Whether to use SQLite or in-memory database
+   * @returns {Promise<void>} Promise that resolves when database is initialized
+   */
+  public async init(): Promise<boolean> {
+    try {
+      // Check if we're in the renderer process
+      const isRenderer = typeof window !== 'undefined' && window.electron;
+      
+      if (isRenderer) {
+        // In renderer process, we'll use IPC to access the database
+        console.log("Initializing CommandService in renderer process...");
+        // No need to init explicitly, the main process handles this
+        this.initialized = true;
+        return true;
+      } else {
+        // In main process, we'll use storage service directly
+        console.log("Initializing CommandService in main process...");
+        
+        // Initialize storage service
+        const success = await this.storageService.initialize();
+        
+        // Check if we need to import legacy command data
+        if (success && !this.useMemoryFallback) {
+          const count = await this.storageService.getCommandCount();
+          
+          // If database is empty, batch import legacy data
+          if (count === 0) {
+            console.log("Importing legacy command data...");
+            await this.importLegacyCommands();
+          }
+        }
+        
+        this.initialized = true;
+        return success;
+      }
+    } catch (error) {
+      console.error("Failed to initialize CommandService", error);
+      // Fallback to in-memory commands if storage init fails
+      this.useMemoryFallback = true;
+      this.initialized = true;
+      return true; // Still return true since we can operate in memory mode
+    }
+  }
+  
+  /**
+   * Ensure the service is initialized before use
+   * 
+   * @returns {Promise<void>} Promise that resolves when initialized
+   */
+  private async ensureDatabaseInitialized(): Promise<void> {
+    if (!this.initialized) {
+      await this.init();
+    }
   }
   
   /**
