@@ -1,26 +1,39 @@
-import React, { useState } from "react";
+import * as React from "react";
+import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { searchCommands, Command } from "./commandData";
-// import Header from "./components/Header";
-import SearchInput from "./components/SearchInput";
-import SearchResults from "./components/SearchResults";
+import AppContainer from "./components/AppContainer";
 import "./index.css";
 
 /**
  * TL;DR App - Alfred-style dark theme with dynamic resizing
+ * Main application component that coordinates search functionality and UI
+ * 
+ * @returns {React.ReactElement} Rendered App component
  */
-const App: React.FC = () => {
+const App = (): React.ReactElement => {
   // ===============================
   // STATE MANAGEMENT
   // ===============================
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isSearchActive, setIsSearchActive] = useState(false);
+  /** Current search query text input */
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  
+  /** Whether search is currently active (has input) */
+  const [isSearchActive, setIsSearchActive] = useState<boolean>(false);
+  
+  /** Current search results based on query */
   const [searchResults, setSearchResults] = useState<Command[]>([]);
 
   // ===============================
   // EVENT HANDLERS
   // ===============================
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  /**
+   * Handles changes to the search input
+   * Updates search query state and performs search
+   * 
+   * @param {React.ChangeEvent<HTMLInputElement>} e - Change event from search input
+   */
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const query = e.target.value;
     setSearchQuery(query);
     setIsSearchActive(query.length > 0);
@@ -33,10 +46,16 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
+  /**
+   * Handles search form submission
+   * Prevents default form submission behavior and logs search query
+   * 
+   * @param {React.FormEvent} e - Form submission event
+   */
+  const handleSearchSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      console.log("Searching for:", searchQuery);
+      // In future versions, this could trigger more advanced search or command execution
     }
   };
 
@@ -44,23 +63,15 @@ const App: React.FC = () => {
   // RENDER
   // ===============================
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden">
-        {/* <div className="bg-gray-900 rounded-xl shadow-2xl overflow-hidden"> */}
-        {/* Minimal padding around search - no separate header */}
-        <div className="pt-2">
-          <SearchInput
-            searchQuery={searchQuery}
-            isSearchActive={isSearchActive}
-            onSearchChange={handleSearchChange}
-            onSearchSubmit={handleSearchSubmit}
-          />
-        </div>
-
-        <SearchResults
-          searchResults={searchResults}
+    // Simple container with fixed height and no scrolling - full window width
+    <div className="bg-gray-900 text-gray-100">
+      <div className="w-full">
+        <AppContainer
           searchQuery={searchQuery}
           isSearchActive={isSearchActive}
+          searchResults={searchResults}
+          onSearchChange={handleSearchChange}
+          onSearchSubmit={handleSearchSubmit}
         />
       </div>
     </div>

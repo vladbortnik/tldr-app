@@ -1,18 +1,34 @@
-import React, { useState } from "react";
+import * as React from "react";
+import { useState } from "react";
 import { Command } from "../commandData";
 
+/**
+ * Props for the CommandCard component
+ */
 interface CommandCardProps {
+  /** Command object to display */
   command: Command;
+  
+  /** Optional click handler */
   onClick?: () => void;
 }
 
 /**
  * CommandCard Component - Alfred-style dark card with minimal design
+ * Displays command information in an expandable card format
+ * 
+ * @param {CommandCardProps} props - Component props
+ * @returns {React.ReactElement} Rendered CommandCard component
  */
-function CommandCard({ command, onClick }: CommandCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+function CommandCard({ command, onClick }: CommandCardProps): React.ReactElement {
+  /** State to track if the card is expanded to show all examples */
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
-  const handleCardClick = () => {
+  /**
+   * Handles click event on the card
+   * Toggles expanded state and calls optional onClick handler
+   */
+  const handleCardClick = (): void => {
     setIsExpanded(!isExpanded);
     if (onClick) {
       onClick();

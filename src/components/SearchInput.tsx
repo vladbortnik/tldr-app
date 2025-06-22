@@ -1,30 +1,57 @@
-import React, { useEffect, useRef } from "react";
+import * as React from "react";
+import { useEffect, useRef } from "react";
 
+/**
+ * Props for the SearchInput component
+ */
 interface SearchInputProps {
+  /** Current search query text */
   searchQuery: string;
+
+  /** Whether search is currently active */
   isSearchActive: boolean;
+
+  /** Handler for search input changes */
   onSearchChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+
+  /** Handler for search form submission */
   onSearchSubmit: (e: React.FormEvent) => void;
 }
 
+/**
+ * SearchInput component - Handles user input for command search
+ *
+ * @param {SearchInputProps} props - Component props
+ * @returns {React.ReactElement} Rendered SearchInput component
+ */
 function SearchInput({
   searchQuery,
   isSearchActive,
   onSearchChange,
   onSearchSubmit,
-}: SearchInputProps) {
+}: SearchInputProps): React.ReactElement {
+  // Reference to the search input element for auto-focus
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Fix ESC key handling
+  /**
+   * Effect for ESC key handling to hide the window
+   */
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      console.log("Key pressed:", e.key); // Debug log
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log("ESC pressed, hiding window"); // Debug log
-        window.electronAPI?.hideWindow();
-      }
+    /**
+     * Handle keydown events globally, focusing on ESC key for window hiding
+     * @param {KeyboardEvent} e - Keyboard event
+     */
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      // ESC key handling temporarily disabled for development
+      // To re-enable, uncomment these lines
+      // if (e.key === "Escape") {
+      //   e.preventDefault();
+      //   e.stopPropagation();
+      //   window.electronAPI?.hideWindow();
+      // }
+
+      // For debugging - capture all keyboard events
+      console.log(`Key pressed: ${e.key}`);
     };
 
     // Add listener to window for global capture
@@ -35,7 +62,9 @@ function SearchInput({
     };
   }, []);
 
-  // Auto-focus input when component mounts
+  /**
+   * Effect to auto-focus the search input when component mounts
+   */
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
@@ -43,7 +72,7 @@ function SearchInput({
   }, []);
 
   return (
-    <div className="px-6 pb-2">
+    <div className="py-4 px-4">
       <form onSubmit={onSearchSubmit}>
         <div className="flex items-center justify-between gap-3">
           {/* Search Input */}
@@ -55,12 +84,13 @@ function SearchInput({
               onChange={onSearchChange}
               placeholder="Search commands..."
               className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-              onKeyDown={(e) => {
-                // Also handle ESC at input level
-                if (e.key === "Escape") {
-                  e.preventDefault();
-                  window.electronAPI?.hideWindow();
-                }
+              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>): void => {
+                // ESC key handling at input level temporarily disabled for development
+                // To re-enable, uncomment these lines
+                // if (e.key === "Escape") {
+                //   e.preventDefault();
+                //   window.electronAPI?.hideWindow();
+                // }
               }}
             />
           </div>

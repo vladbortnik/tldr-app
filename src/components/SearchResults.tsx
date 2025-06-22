@@ -1,36 +1,57 @@
-import React, { useEffect } from "react";
+import * as React from "react";
+import { useEffect } from "react";
 import { Command } from "../commandData";
 import CommandCard from "./CommandCard";
 
+/**
+ * Props for the SearchResults component
+ */
 interface SearchResultsProps {
+  /** Array of command results matching the search query */
   searchResults: Command[];
+  
+  /** Current search query text */
   searchQuery: string;
+  
+  /** Whether search is currently active */
   isSearchActive: boolean;
 }
 
+/**
+ * SearchResults component - Displays search results and handles dynamic window resizing
+ * 
+ * @param {SearchResultsProps} props - Component props
+ * @returns {React.ReactElement | null} Rendered SearchResults component or null if search is not active
+ */
 function SearchResults({
   searchResults,
   searchQuery,
   isSearchActive,
-}: SearchResultsProps) {
-  // Dynamic resizing with 30% wider minimum width
+}: SearchResultsProps): React.ReactElement | null {
+  /**
+   * Effect for dynamically resizing window based on search results
+   * Adjusts window height based on number of visible results and width for long command names
+   */
   useEffect(() => {
-    const resizeWindow = () => {
-      const baseHeight = 80; // Reduced since no separate header
-      const cardHeight = 140;
-      const maxCards = 4;
+    /**
+     * Calculates and sets appropriate window dimensions based on search results
+     */
+    const resizeWindow = (): void => {
+      const baseHeight = 80; // Height with just the search bar (no separate header)
+      const cardHeight = 140; // Height of each result card
+      const maxCards = 4; // Maximum number of cards to display
 
       const visibleCards = Math.min(searchResults.length, maxCards);
-      const totalHeight = baseHeight + visibleCards * cardHeight + 40;
+      const totalHeight = baseHeight + visibleCards * cardHeight + 40; // 40px for padding
 
       // 30% wider minimum width: 600px * 1.3 = 780px
-      const baseWidth = 780; // Increased from 600px
+      const baseWidth = 780;
       const hasLongCommands = searchResults.some((cmd) => cmd.name.length > 10);
       const totalWidth = hasLongCommands ? baseWidth + 100 : baseWidth;
 
       window.electronAPI?.resizeWindow({
         width: totalWidth,
-        height: Math.min(totalHeight, 600),
+        height: Math.min(totalHeight, 600), // Cap at 600px height
       });
     };
 

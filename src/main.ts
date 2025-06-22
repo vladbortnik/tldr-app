@@ -1,13 +1,24 @@
 import { app, BrowserWindow, globalShortcut, screen, ipcMain } from "electron";
 import path from "path";
 
+/**
+ * TL;DR App - Main Process
+ * Entry point for the Electron main process that handles window creation and IPC communication
+ */
+
 if (require("electron-squirrel-startup")) {
   app.quit();
 }
 
+/** Reference to the main application window */
 let mainWindow: BrowserWindow;
 
+/**
+ * Creates the main application window with appropriate settings
+ * Centers the window on the screen and configures security settings
+ */
 const createWindow = (): void => {
+  // Get the primary display dimensions for centering the window
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width, height } = primaryDisplay.workAreaSize;
 
@@ -40,25 +51,40 @@ const createWindow = (): void => {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
 
-  mainWindow.on("blur", () => {
-    mainWindow.hide();
-  });
+  // Auto-hide on blur temporarily disabled for development
+  // To re-enable, uncomment these lines
+  // mainWindow.on("blur", () => {
+  //   mainWindow.hide();
+  // });
 };
 
-// IPC handlers
-ipcMain.handle("hide-window", () => {
-  console.log("IPC: hide-window received"); // Debug log
+// ===============================
+// IPC HANDLERS
+// ===============================
+
+/**
+ * IPC handler for hide-window event
+ * Hides the main window when triggered from renderer process
+ */
+ipcMain.handle("hide-window", (): void => {
   if (mainWindow) {
     mainWindow.hide();
   }
 });
 
-ipcMain.handle("resize-window", (event, { width, height }) => {
-  console.log("IPC: resize-window received", { width, height }); // Debug log
+/**
+ * IPC handler for resize-window event
+ * Resizes the main window to specified dimensions and centers it on screen
+ * 
+ * @param {Electron.IpcMainInvokeEvent} event - The IPC event
+ * @param {{ width: number; height: number }} dimensions - The new window dimensions
+ */
+ipcMain.handle("resize-window", (event: Electron.IpcMainInvokeEvent, { width, height }: { width: number; height: number }): void => {
   if (mainWindow) {
     const primaryDisplay = screen.getPrimaryDisplay();
     const screenSize = primaryDisplay.workAreaSize;
 
+    // Calculate position to center window on screen
     const x = Math.round((screenSize.width - width) / 2);
     const y = Math.round((screenSize.height - height) / 2);
 
@@ -66,10 +92,15 @@ ipcMain.handle("resize-window", (event, { width, height }) => {
   }
 });
 
-app.on("ready", () => {
+/**
+ * App ready event handler
+ * Creates the main window and registers global keyboard shortcuts
+ */
+app.on("ready", (): void => {
   createWindow();
 
-  globalShortcut.register("CommandOrControl+Alt+Space", () => {
+  // Register global hotkey to toggle window visibility
+  globalShortcut.register("CommandOrControl+Alt+Space", (): void => {
     if (mainWindow) {
       if (mainWindow.isVisible()) {
         mainWindow.hide();
@@ -81,18 +112,30 @@ app.on("ready", () => {
   });
 });
 
-app.on("window-all-closed", () => {
+/**
+ * Window-all-closed event handler
+ * Quits the application when all windows are closed (except on macOS)
+ */
+app.on("window-all-closed", (): void => {
   if (process.platform !== "darwin") {
     app.quit();
   }
 });
 
-app.on("activate", () => {
+/**
+ * App activate event handler (macOS specific)
+ * Re-creates the window when the dock icon is clicked and no windows are open
+ */
+app.on("activate", (): void => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
 });
 
-app.on("will-quit", () => {
+/**
+ * App will-quit event handler
+ * Cleans up resources before the app exits by unregistering all shortcuts
+ */
+app.on("will-quit", (): void => {
   globalShortcut.unregisterAll();
 });

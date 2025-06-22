@@ -1,9 +1,21 @@
-// TypeScript interface for type safety (like Python dataclass)
+/**
+ * Command interface representing a command and its details
+ * TypeScript interface for type safety (similar to Python dataclass)
+ */
 export interface Command {
+  /** The command name/identifier */
   name: string;
-  standsFor: string; // What the abbreviation means or origin of command name
+  
+  /** What the abbreviation means or origin of command name */
+  standsFor: string;
+  
+  /** Description of what the command does */
   description: string;
+  
+  /** Usage examples for the command */
   examples: string[];
+  
+  /** Category the command belongs to */
   category: string;
 }
 
@@ -266,6 +278,8 @@ export const commandsDatabase: Record<string, Command> = {
 /**
  * Get all available command names for autocomplete
  * Similar to getting dictionary keys in Python: list(commands.keys())
+ *
+ * @returns {string[]} Array of all available command names
  */
 export const getCommandNames = (): string[] => {
   return Object.keys(commandsDatabase);
@@ -274,6 +288,9 @@ export const getCommandNames = (): string[] => {
 /**
  * Search commands by name or description
  * Similar to filtering a Python list with list comprehension
+ *
+ * @param {string} query - The search query to match against command names and descriptions
+ * @returns {Command[]} Array of commands matching the search query
  */
 export const searchCommands = (query: string): Command[] => {
   const searchTerm = query.toLowerCase().trim();
@@ -293,6 +310,9 @@ export const searchCommands = (query: string): Command[] => {
 /**
  * Get command by exact name
  * Similar to dictionary lookup in Python: commands.get(name)
+ *
+ * @param {string} name - The exact name of the command to retrieve
+ * @returns {Command | null} The command object if found, null otherwise
  */
 export const getCommandByName = (name: string): Command | null => {
   return commandsDatabase[name.toLowerCase()] || null;
@@ -301,6 +321,9 @@ export const getCommandByName = (name: string): Command | null => {
 /**
  * Get commands by category
  * Similar to filtering by category in Python
+ *
+ * @param {string} category - The category to filter commands by
+ * @returns {Command[]} Array of commands belonging to the specified category
  */
 export const getCommandsByCategory = (category: string): Command[] => {
   return Object.values(commandsDatabase).filter(
